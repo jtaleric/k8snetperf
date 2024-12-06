@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
@@ -151,8 +152,9 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 			"spec": map[string]interface{}{
 				"topology": "Layer2",
 				"layer2": map[string]interface{}{
-					"role":    "Primary",
-					"subnets": []string{"10.0.0.0/24", "2001:db8::/60"},
+					"role":          "Primary",
+					"subnets":       []string{"10.0.0.0/24"},
+					"ipamLifecycle": "Persistent",
 				},
 			},
 		},
@@ -557,7 +559,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.Bridge)
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.Bridge, perf.Udn)
 	if err != nil {
 		return err
 	}
@@ -565,6 +567,9 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	if err != nil {
 		return err
 	}
+	log.Infof("⏰ Waiting 120s for the Server VMI to be ready...")
+	//wait for the VMI to be ready
+	time.Sleep(120 * time.Second)
 	if strings.Contains(name, "host") {
 		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
@@ -582,7 +587,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.Bridge)
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.Bridge, perf.Udn)
 	if err != nil {
 		return err
 	}
@@ -591,6 +596,9 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	if err != nil {
 		return err
 	}
+	log.Infof("⏰ Waiting 200s for the client VMI to be ready...")
+	//wait for the VMI to be ready
+	time.Sleep(200 * time.Second)
 	if strings.Contains(name, "host") {
 		perf.ClientHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
